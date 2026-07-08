@@ -1,0 +1,8 @@
+[package]
+name = "irene"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.103"
+niri-ipc = "26.4.0"
