@@ -3,7 +3,7 @@ use std::fs::write;
 use niri_ipc::{Window, WindowLayout};
 
 use crate::font::{
-    apply_ghostty_font_size_with_path, calculate_font_size, get_ghostty_pids,
+    apply_ghostty_font_size_with_path, calculate_font_size_with_base, get_ghostty_pids,
     get_ghostty_pids_for_workspace, restore_ghostty_font_size_with_path,
 };
 use crate::layout::{
@@ -188,7 +188,7 @@ fn test_column_parsing_and_5x5_grid_preservation() {
 fn test_font_scaling_bounds() {
     for c in 1..=10 {
         for r in 1..=10 {
-            let size = calculate_font_size(c, r);
+            let size = calculate_font_size_with_base(12.0, c, r);
             assert!(
                 size >= 8.5,
                 "Font size below 8.5 floor for C={c}, R={r}: {size}"
@@ -203,7 +203,7 @@ fn test_font_scaling_bounds() {
 
 #[test]
 fn test_font_scaling_5x5_floor() {
-    let size = calculate_font_size(5, 5);
+    let size = calculate_font_size_with_base(12.0, 5, 5);
     assert_eq!(size, 8.5);
 }
 
@@ -212,7 +212,7 @@ fn test_font_scaling_monotonicity() {
     for r in 1..=5 {
         let mut prev = 13.0;
         for c in 1..=5 {
-            let size = calculate_font_size(c, r);
+            let size = calculate_font_size_with_base(12.0, c, r);
             assert!(size <= prev);
             prev = size;
         }
@@ -221,7 +221,7 @@ fn test_font_scaling_monotonicity() {
     for c in 1..=5 {
         let mut prev = 13.0;
         for r in 1..=5 {
-            let size = calculate_font_size(c, r);
+            let size = calculate_font_size_with_base(12.0, c, r);
             assert!(size <= prev);
             prev = size;
         }
