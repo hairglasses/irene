@@ -26,7 +26,7 @@ pub fn calculate_equal_column_widths(usable_width: i32, gap: i32, num_columns: u
     let n = num_columns as i32;
     let total_gaps = (n + 1) * gap;
     let available_width = usable_width - total_gaps;
-    if available_width <= 0 {
+    if available_width < n {
         return vec![1; num_columns];
     }
 
@@ -51,7 +51,7 @@ pub fn calculate_equal_row_heights(usable_height: i32, gap: i32, num_rows: usize
     let m = num_rows as i32;
     let total_gaps = (m + 1) * gap;
     let available_height = usable_height - total_gaps;
-    if available_height <= 0 {
+    if available_height < m {
         return vec![1; num_rows];
     }
 
