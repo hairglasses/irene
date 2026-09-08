@@ -204,12 +204,30 @@ fn run_daemon(equal_grid: bool) -> Result<()> {
                 );
             }
             Event::WindowsChanged { windows } => {
-                tracked = windows.iter().map(|w| (w.id, membership(w))).collect();
-                if let Ok(workspaces) = fetch_workspaces(&mut action_socket)
-                    && let Some(focused) = workspaces.iter().find(|ws| ws.is_focused)
-                {
-                    dirty.push(focused.id);
+                let new_tracked: HashMap<u64, (Option<u64>, bool)> =
+                    windows.iter().map(|w| (w.id, membership(w))).collect();
+                for (id, new_mem) in &new_tracked {
+                    if let Some(old_mem) = tracked.get(id) {
+                        if old_mem != new_mem {
+                            if let (Some(ws), false) = new_mem {
+                                dirty.push(*ws);
+                            }
+                            if let (Some(ws), false) = old_mem {
+                                dirty.push(*ws);
+                            }
+                        }
+                    } else if let (Some(ws), false) = new_mem {
+                        dirty.push(*ws);
+                    }
                 }
+                for (id, old_mem) in &tracked {
+                    if !new_tracked.contains_key(id)
+                        && let (Some(ws), false) = old_mem
+                    {
+                        dirty.push(*ws);
+                    }
+                }
+                tracked = new_tracked;
             }
             Event::WindowOpenedOrChanged { window } => {
                 let new = membership(&window);
