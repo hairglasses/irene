@@ -68,7 +68,7 @@ pub fn get_font_size_floor() -> f64 {
             return val;
         }
     }
-    15.0
+    8.5
 }
 
 pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize) -> f64 {
