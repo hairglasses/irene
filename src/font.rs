@@ -55,7 +55,7 @@ pub fn get_base_font_size() -> f64 {
             return detect_ghostty_config_baseline(&content);
         }
     }
-    12.0
+    15.0
 }
 
 pub fn get_font_size_floor() -> f64 {
@@ -68,17 +68,16 @@ pub fn get_font_size_floor() -> f64 {
             return val;
         }
     }
-    8.5
+    15.0
 }
 
 pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize) -> f64 {
     let c = num_cols.max(1) as f64;
     let r = max_rows.max(1) as f64;
-    let col_penalty = (c - 2.0).max(0.0) * 0.7;
-    let row_penalty = (r - 2.0).max(0.0) * 0.5;
-    let size = base - col_penalty - row_penalty;
-    let min_floor = (base - 3.5).max(6.0);
-    size.clamp(min_floor, base)
+    let scale_span = (base - 8.5).max(0.0);
+    let penalty = ((c - 2.0).max(0.0) * 0.6 + (r - 2.0).max(0.0) * 0.4) / 3.0 * scale_span;
+    let size = (base - penalty).max(8.5);
+    (size * 2.0).round() / 2.0
 }
 
 pub fn calculate_font_size(num_cols: usize, max_rows: usize) -> f64 {
