@@ -153,6 +153,22 @@ pub fn apply_ghostty_font_size_with_path(
         String::new()
     };
 
+    let already_matches = config_path.exists()
+        && content.lines().any(|l| {
+            let trimmed = l.trim();
+            if let Some(rest) = trimmed.strip_prefix("font-size") {
+                let val_str = rest.trim_start_matches([' ', '=']).trim();
+                if let Ok(val) = val_str.parse::<f64>() {
+                    return (val - font_size).abs() < 0.05;
+                }
+            }
+            false
+        });
+
+    if already_matches {
+        return Ok(());
+    }
+
     let mut lines: Vec<String> = content
         .lines()
         .filter(|l| !l.trim().starts_with("font-size"))
@@ -196,13 +212,30 @@ pub fn restore_ghostty_font_size_with_path(
     let tmp_path = config_path.with_file_name(format!(".config.local.{}.tmp", std::process::id()));
 
     if let Some(orig) = original_config {
+        if config_path.exists() && read_to_string(config_path).unwrap_or_default() == orig {
+            return Ok(());
+        }
         let mut file = File::create(&tmp_path)?;
         file.write_all(orig.as_bytes())?;
         file.sync_all()?;
         rename(&tmp_path, config_path)?;
+        signal_ghostty_pids(pids);
     } else if config_path.exists() {
         let base = get_base_font_size();
         let content = read_to_string(config_path).unwrap_or_default();
+        let already_matches = content.lines().any(|l| {
+            let trimmed = l.trim();
+            if let Some(rest) = trimmed.strip_prefix("font-size") {
+                let val_str = rest.trim_start_matches([' ', '=']).trim();
+                if let Ok(val) = val_str.parse::<f64>() {
+                    return (val - base).abs() < 0.05;
+                }
+            }
+            false
+        });
+        if already_matches {
+            return Ok(());
+        }
         let mut lines: Vec<String> = content
             .lines()
             .filter(|l| !l.trim().starts_with("font-size"))
@@ -214,8 +247,8 @@ pub fn restore_ghostty_font_size_with_path(
         file.write_all(data.as_bytes())?;
         file.sync_all()?;
         rename(&tmp_path, config_path)?;
+        signal_ghostty_pids(pids);
     }
 
-    signal_ghostty_pids(pids);
     Ok(())
 }

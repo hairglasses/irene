@@ -138,7 +138,13 @@ pub fn layout_equal_grid_2d(
     }
 
     if !pids.is_empty() {
-        let _ = apply_ghostty_font_size(font_size, &pids);
+        let is_focused = fetch_workspaces(socket)
+            .ok()
+            .and_then(|wss| wss.into_iter().find(|ws| ws.id == workspace_id))
+            .is_some_and(|ws| ws.is_focused);
+        if is_focused {
+            let _ = apply_ghostty_font_size(font_size, &pids);
+        }
     }
 
     if is_compressed(workspace_id)

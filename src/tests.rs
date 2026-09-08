@@ -278,6 +278,11 @@ fn test_font_config_local_apply_and_restore() {
     assert!(content2.contains("font-size = 8.5"));
     assert_eq!(content2.matches("font-size").count(), 1);
 
+    // Idempotent re-apply should succeed without modifying
+    apply_ghostty_font_size_with_path(8.5, &[], &config_path).unwrap();
+    let content3 = std::fs::read_to_string(&config_path).unwrap();
+    assert_eq!(content2, content3);
+
     restore_ghostty_font_size_with_path(Some("font-family = Terminess\n"), &[], &config_path)
         .unwrap();
     let restored = std::fs::read_to_string(&config_path).unwrap();
