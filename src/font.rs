@@ -10,12 +10,11 @@ use niri_ipc::Window;
 pub fn get_base_font_size() -> f64 {
     if let Ok(home) = std::env::var("HOME") {
         let path = format!("{home}/.config/ghostty/base-font-size");
-        if let Ok(content) = read_to_string(&path) {
-            if let Ok(val) = content.trim().parse::<f64>() {
-                if (6.0..=32.0).contains(&val) {
-                    return val;
-                }
-            }
+        if let Ok(content) = read_to_string(&path)
+            && let Ok(val) = content.trim().parse::<f64>()
+            && (6.0..=32.0).contains(&val)
+        {
+            return val;
         }
     }
     12.0
