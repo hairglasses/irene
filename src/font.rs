@@ -7,17 +7,55 @@ use std::path::Path;
 use anyhow::Result;
 use niri_ipc::Window;
 
+pub fn detect_ghostty_config_baseline(content: &str) -> f64 {
+    let mut explicit_size = None;
+    let mut has_terminess = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("font-size") {
+            let val_str = rest.trim_start_matches([' ', '=']).trim();
+            if let Ok(val) = val_str.parse::<f64>()
+                && (6.0..=32.0).contains(&val)
+            {
+                explicit_size = Some(val);
+            }
+        } else if let Some(rest) = trimmed.strip_prefix("font-family") {
+            let val_str = rest.trim_start_matches([' ', '=']).trim();
+            if val_str.to_ascii_lowercase().contains("terminess") {
+                has_terminess = true;
+            }
+        }
+    }
+
+    if let Some(sz) = explicit_size {
+        sz
+    } else if has_terminess {
+        17.0
+    } else {
+        12.0
+    }
+}
+
 pub fn get_base_font_size() -> f64 {
     if let Ok(home) = std::env::var("HOME") {
-        let path = format!("{home}/.config/ghostty/base-font-size");
-        if let Ok(content) = read_to_string(&path)
+        let base_path = format!("{home}/.config/ghostty/base-font-size");
+        if let Ok(content) = read_to_string(&base_path)
             && let Ok(val) = content.trim().parse::<f64>()
             && (6.0..=32.0).contains(&val)
         {
             return val;
         }
+
+        let config_path = format!("{home}/.config/ghostty/config");
+        if let Ok(content) = read_to_string(&config_path) {
+            return detect_ghostty_config_baseline(&content);
+        }
     }
-    15.0
+    12.0
 }
 
 pub fn get_font_size_floor() -> f64 {
@@ -30,7 +68,7 @@ pub fn get_font_size_floor() -> f64 {
             return val;
         }
     }
-    15.0
+    8.5
 }
 
 pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize) -> f64 {

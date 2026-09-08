@@ -5,9 +5,50 @@ use niri_ipc::Window;
 pub const DEFAULT_GAP: i32 = 10;
 pub const DEFAULT_STRUT_LEFT: i32 = 28;
 pub const DEFAULT_STRUT_RIGHT: i32 = 0;
+pub const DEFAULT_STRUT_TOP: i32 = 0;
+pub const DEFAULT_STRUT_BOTTOM: i32 = 0;
 
 pub fn calculate_usable_width(monitor_width: i32, strut_left: i32, strut_right: i32) -> i32 {
     (monitor_width - strut_left - strut_right).max(0)
+}
+
+pub fn calculate_usable_height(monitor_height: i32, strut_top: i32, strut_bottom: i32) -> i32 {
+    (monitor_height - strut_top - strut_bottom).max(0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LayoutConfig {
+    pub gap: i32,
+    pub strut_left: i32,
+    pub strut_right: i32,
+    pub strut_top: i32,
+    pub strut_bottom: i32,
+}
+
+impl Default for LayoutConfig {
+    fn default() -> Self {
+        Self {
+            gap: DEFAULT_GAP,
+            strut_left: DEFAULT_STRUT_LEFT,
+            strut_right: DEFAULT_STRUT_RIGHT,
+            strut_top: DEFAULT_STRUT_TOP,
+            strut_bottom: DEFAULT_STRUT_BOTTOM,
+        }
+    }
+}
+
+pub fn is_window_excluded(window: &Window, excluded_app_ids: &[String]) -> bool {
+    if window.is_floating {
+        return true;
+    }
+    if let Some(ref app) = window.app_id
+        && excluded_app_ids
+            .iter()
+            .any(|ex| app.eq_ignore_ascii_case(ex))
+    {
+        return true;
+    }
+    false
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,11 +111,19 @@ pub fn calculate_equal_row_heights(usable_height: i32, gap: i32, num_rows: usize
 }
 
 pub fn parse_workspace_columns(windows: &[Window], workspace_id: u64) -> Vec<ColumnInfo> {
+    parse_workspace_columns_with_exclusions(windows, workspace_id, &[])
+}
+
+pub fn parse_workspace_columns_with_exclusions(
+    windows: &[Window],
+    workspace_id: u64,
+    excluded_app_ids: &[String],
+) -> Vec<ColumnInfo> {
     let mut cols_map: std::collections::BTreeMap<usize, Vec<&Window>> =
         std::collections::BTreeMap::new();
 
     for w in windows {
-        if w.workspace_id != Some(workspace_id) || w.is_floating {
+        if w.workspace_id != Some(workspace_id) || is_window_excluded(w, excluded_app_ids) {
             continue;
         }
         if let Some((col_idx, _)) = w.layout.pos_in_scrolling_layout {

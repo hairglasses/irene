@@ -3,12 +3,14 @@ use std::fs::write;
 use niri_ipc::{Window, WindowLayout};
 
 use crate::font::{
-    apply_ghostty_font_size_with_path, calculate_font_size_with_base, get_ghostty_pids,
-    get_ghostty_pids_for_workspace, restore_ghostty_font_size_with_path,
+    apply_ghostty_font_size_with_path, calculate_font_size_with_base,
+    detect_ghostty_config_baseline, get_ghostty_pids, get_ghostty_pids_for_workspace,
+    restore_ghostty_font_size_with_path,
 };
 use crate::layout::{
-    DEFAULT_GAP, DEFAULT_STRUT_LEFT, DEFAULT_STRUT_RIGHT, calculate_equal_column_widths,
-    calculate_equal_row_heights, calculate_usable_width, parse_workspace_columns,
+    DEFAULT_GAP, DEFAULT_STRUT_BOTTOM, DEFAULT_STRUT_LEFT, DEFAULT_STRUT_RIGHT, DEFAULT_STRUT_TOP,
+    LayoutConfig, calculate_equal_column_widths, calculate_equal_row_heights,
+    calculate_usable_height, calculate_usable_width, is_window_excluded, parse_workspace_columns,
 };
 use crate::snapshot::{
     ColumnSnapshot, FontSnapshot, WorkspaceSnapshot, acquire_lock_from_path, is_compressed,
@@ -454,4 +456,112 @@ fn test_snapshot_helpers_and_paths() {
     remove_snapshot(ws_id);
     assert!(!is_compressed(ws_id));
     assert!(!is_compressed_with_path(p));
+}
+
+#[test]
+fn test_usable_height_and_struts() {
+    assert_eq!(calculate_usable_height(1440, 0, 0), 1440);
+    assert_eq!(calculate_usable_height(1440, 30, 0), 1410);
+    assert_eq!(calculate_usable_height(1440, 0, 40), 1400);
+    assert_eq!(calculate_usable_height(1440, 20, 30), 1390);
+    assert_eq!(calculate_usable_height(1440, 2000, 0), 0);
+}
+
+#[test]
+fn test_layout_config_defaults() {
+    let cfg = LayoutConfig::default();
+    assert_eq!(cfg.gap, DEFAULT_GAP);
+    assert_eq!(cfg.strut_left, DEFAULT_STRUT_LEFT);
+    assert_eq!(cfg.strut_right, DEFAULT_STRUT_RIGHT);
+    assert_eq!(cfg.strut_top, DEFAULT_STRUT_TOP);
+    assert_eq!(cfg.strut_bottom, DEFAULT_STRUT_BOTTOM);
+}
+
+#[test]
+fn test_is_window_excluded() {
+    let floating_win = Window {
+        id: 1,
+        title: Some("Floating".to_string()),
+        app_id: Some("ghostty".to_string()),
+        pid: Some(1234),
+        workspace_id: Some(1),
+        is_focused: false,
+        is_floating: true,
+        is_urgent: false,
+        focus_timestamp: None,
+        layout: WindowLayout {
+            pos_in_scrolling_layout: None,
+            tile_size: (500.0, 500.0),
+            window_size: (500, 500),
+            tile_pos_in_workspace_view: None,
+            window_offset_in_tile: (0.0, 0.0),
+        },
+    };
+    assert!(is_window_excluded(&floating_win, &[]));
+
+    let tiled_mpv = Window {
+        id: 2,
+        title: Some("Video".to_string()),
+        app_id: Some("mpv".to_string()),
+        pid: Some(2345),
+        workspace_id: Some(1),
+        is_focused: false,
+        is_floating: false,
+        is_urgent: false,
+        focus_timestamp: None,
+        layout: WindowLayout {
+            pos_in_scrolling_layout: Some((0, 0)),
+            tile_size: (800.0, 600.0),
+            window_size: (800, 600),
+            tile_pos_in_workspace_view: None,
+            window_offset_in_tile: (0.0, 0.0),
+        },
+    };
+    assert!(!is_window_excluded(&tiled_mpv, &[]));
+    assert!(is_window_excluded(&tiled_mpv, &["mpv".to_string()]));
+    assert!(is_window_excluded(&tiled_mpv, &["MPV".to_string()]));
+    assert!(!is_window_excluded(&tiled_mpv, &["steam".to_string()]));
+}
+
+#[test]
+fn test_detect_ghostty_config_baseline() {
+    let terminess_cfg = r#"
+# Ghostty config
+font-family = Terminess Nerd Font Mono
+background-opacity = 0.85
+"#;
+    assert_eq!(detect_ghostty_config_baseline(terminess_cfg), 17.0);
+
+    let explicit_cfg = r#"
+font-family = Terminess Nerd Font Mono
+font-size = 14.5
+"#;
+    assert_eq!(detect_ghostty_config_baseline(explicit_cfg), 14.5);
+
+    let other_cfg = r#"
+font-family = Maple Mono NF CN
+font-size = 11.0
+"#;
+    assert_eq!(detect_ghostty_config_baseline(other_cfg), 11.0);
+
+    let plain_cfg = r#"
+# No font settings
+background-blur = true
+"#;
+    assert_eq!(detect_ghostty_config_baseline(plain_cfg), 12.0);
+}
+
+#[test]
+fn test_equal_row_heights_exact_sum() {
+    let usable_h = 1440;
+    let gap = 10;
+    for m in 1..=10 {
+        let heights = calculate_equal_row_heights(usable_h, gap, m);
+        assert_eq!(heights.len(), m);
+        let total: i32 = heights.iter().sum::<i32>() + (m as i32 + 1) * gap;
+        assert_eq!(total, usable_h);
+        let max_h = *heights.iter().max().unwrap();
+        let min_h = *heights.iter().min().unwrap();
+        assert!(max_h - min_h <= 1);
+    }
 }

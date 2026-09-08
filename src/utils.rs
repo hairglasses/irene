@@ -10,7 +10,11 @@ use crate::font::{
     restore_ghostty_font_size,
 };
 pub use crate::layout::DEFAULT_GAP;
-use crate::layout::{calculate_equal_column_widths, parse_workspace_columns};
+use crate::layout::{
+    DEFAULT_STRUT_BOTTOM, DEFAULT_STRUT_LEFT, DEFAULT_STRUT_RIGHT, DEFAULT_STRUT_TOP,
+    calculate_equal_column_widths, calculate_equal_row_heights, calculate_usable_height,
+    calculate_usable_width, parse_workspace_columns,
+};
 use crate::snapshot::{
     ColumnSnapshot, FontSnapshot, WorkspaceSnapshot, is_compressed, load_snapshot, remove_snapshot,
     save_snapshot,
@@ -76,6 +80,17 @@ pub fn layout_equal_grid(
     usable_width: i32,
     gap: i32,
 ) -> Result<()> {
+    layout_equal_grid_2d(socket, windows, workspace_id, usable_width, 1440, gap)
+}
+
+pub fn layout_equal_grid_2d(
+    socket: &mut Socket,
+    windows: &[Window],
+    workspace_id: u64,
+    usable_width: i32,
+    usable_height: i32,
+    gap: i32,
+) -> Result<()> {
     let columns = parse_workspace_columns(windows, workspace_id);
     if columns.is_empty() {
         return Ok(());
@@ -104,8 +119,21 @@ pub fn layout_equal_grid(
                 change: SizeChange::SetFixed(w),
             },
         )?;
-        for &id in &col.window_ids {
-            send_action(socket, Action::ResetWindowHeight { id: Some(id) })?;
+        if col.window_ids.len() > 1 {
+            let row_heights = calculate_equal_row_heights(usable_height, gap, col.window_ids.len());
+            for (&id, &h) in col.window_ids.iter().zip(&row_heights) {
+                send_action(
+                    socket,
+                    Action::SetWindowHeight {
+                        id: Some(id),
+                        change: SizeChange::SetFixed(h),
+                    },
+                )?;
+            }
+        } else {
+            for &id in &col.window_ids {
+                send_action(socket, Action::ResetWindowHeight { id: Some(id) })?;
+            }
         }
     }
 
@@ -144,7 +172,23 @@ pub fn layout_workspace(
     _scale: f64,
 ) -> Result<()> {
     if is_compressed(workspace_id) {
-        return layout_equal_grid(socket, windows, workspace_id, 2560, DEFAULT_GAP);
+        let outputs = fetch_outputs(socket)?;
+        let workspaces = fetch_workspaces(socket)?;
+        let out_name = workspaces
+            .iter()
+            .find(|ws| ws.id == workspace_id)
+            .and_then(|ws| ws.output.as_deref());
+        let (width, height) = output_dimensions(&outputs, out_name);
+        let usable_w = calculate_usable_width(width, DEFAULT_STRUT_LEFT, DEFAULT_STRUT_RIGHT);
+        let usable_h = calculate_usable_height(height, DEFAULT_STRUT_TOP, DEFAULT_STRUT_BOTTOM);
+        return layout_equal_grid_2d(
+            socket,
+            windows,
+            workspace_id,
+            usable_w,
+            usable_h,
+            DEFAULT_GAP,
+        );
     }
 
     let mut tiles: Vec<(u64, (usize, usize))> = windows
@@ -387,12 +431,17 @@ pub fn toggle_compression(
         let orig_widths: Vec<i32> = columns.iter().map(|c| c.original_pixel_width).collect();
         let compressed_widths = calculate_equal_column_widths(usable_width, gap, columns.len());
 
+        let outputs = fetch_outputs(socket)?;
+        let (_, mon_height) = output_dimensions(&outputs, ws.output.as_deref());
+        let usable_height =
+            calculate_usable_height(mon_height, DEFAULT_STRUT_TOP, DEFAULT_STRUT_BOTTOM);
+
         let snapshot = WorkspaceSnapshot {
             version: 1,
             workspace_id: ws_id,
             output_name: ws.output.clone(),
             monitor_width: Some(usable_width),
-            monitor_height: Some(1440),
+            monitor_height: Some(mon_height),
             timestamp: Some(now),
             active_window_id: ws.active_window_id,
             columns: columns
@@ -419,7 +468,7 @@ pub fn toggle_compression(
         };
         save_snapshot(&snapshot)?;
 
-        layout_equal_grid(socket, &windows, ws_id, usable_width, gap)?;
+        layout_equal_grid_2d(socket, &windows, ws_id, usable_width, usable_height, gap)?;
         let _ = send_action(socket, Action::CenterVisibleColumns {});
         Ok(true)
     }
