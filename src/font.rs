@@ -17,7 +17,20 @@ pub fn get_base_font_size() -> f64 {
             return val;
         }
     }
-    12.0
+    15.0
+}
+
+pub fn get_font_size_floor() -> f64 {
+    if let Ok(home) = std::env::var("HOME") {
+        let path = format!("{home}/.config/ghostty/font-size-floor");
+        if let Ok(content) = read_to_string(&path)
+            && let Ok(val) = content.trim().parse::<f64>()
+            && (6.0..=32.0).contains(&val)
+        {
+            return val;
+        }
+    }
+    15.0
 }
 
 pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize) -> f64 {
@@ -31,7 +44,10 @@ pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize
 }
 
 pub fn calculate_font_size(num_cols: usize, max_rows: usize) -> f64 {
-    calculate_font_size_with_base(get_base_font_size(), num_cols, max_rows)
+    let base = get_base_font_size();
+    let floor = get_font_size_floor();
+    let raw = calculate_font_size_with_base(base, num_cols, max_rows);
+    raw.max(floor)
 }
 
 pub fn get_ghostty_pids(windows: &[Window]) -> Vec<i32> {
