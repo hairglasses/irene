@@ -7,13 +7,32 @@ use std::path::Path;
 use anyhow::Result;
 use niri_ipc::Window;
 
-pub fn calculate_font_size(num_cols: usize, max_rows: usize) -> f64 {
+pub fn get_base_font_size() -> f64 {
+    if let Ok(home) = std::env::var("HOME") {
+        let path = format!("{home}/.config/ghostty/base-font-size");
+        if let Ok(content) = read_to_string(&path) {
+            if let Ok(val) = content.trim().parse::<f64>() {
+                if (6.0..=32.0).contains(&val) {
+                    return val;
+                }
+            }
+        }
+    }
+    12.0
+}
+
+pub fn calculate_font_size_with_base(base: f64, num_cols: usize, max_rows: usize) -> f64 {
     let c = num_cols.max(1) as f64;
     let r = max_rows.max(1) as f64;
     let col_penalty = (c - 2.0).max(0.0) * 0.7;
     let row_penalty = (r - 2.0).max(0.0) * 0.5;
-    let size = 12.0 - col_penalty - row_penalty;
-    size.clamp(8.5, 12.0)
+    let size = base - col_penalty - row_penalty;
+    let min_floor = (base - 3.5).max(6.0);
+    size.clamp(min_floor, base)
+}
+
+pub fn calculate_font_size(num_cols: usize, max_rows: usize) -> f64 {
+    calculate_font_size_with_base(get_base_font_size(), num_cols, max_rows)
 }
 
 pub fn get_ghostty_pids(windows: &[Window]) -> Vec<i32> {
@@ -130,13 +149,16 @@ pub fn restore_ghostty_font_size_with_path(
         file.sync_all()?;
         rename(&tmp_path, config_path)?;
     } else if config_path.exists() {
+        let base = get_base_font_size();
         let content = read_to_string(config_path).unwrap_or_default();
-        let lines: Vec<&str> = content
+        let mut lines: Vec<String> = content
             .lines()
             .filter(|l| !l.trim().starts_with("font-size"))
+            .map(|s| s.to_string())
             .collect();
+        lines.push(format!("font-size = {base:.1}"));
         let mut file = File::create(&tmp_path)?;
-        let data = lines.join("\n") + if lines.is_empty() { "" } else { "\n" };
+        let data = lines.join("\n") + "\n";
         file.write_all(data.as_bytes())?;
         file.sync_all()?;
         rename(&tmp_path, config_path)?;
